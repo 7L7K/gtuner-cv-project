@@ -9,13 +9,22 @@ from ultralytics import YOLO
 
 # Dynamic Pathing to find your model
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(SCRIPT_DIR, "apex_8n.pt")
+MODEL_CANDIDATES = (
+    os.path.join(SCRIPT_DIR, "apex_8n.pt"),
+    os.path.join(os.path.dirname(SCRIPT_DIR), "models", "apex_8n.pt"),
+)
+MODEL_PATH = next((path for path in MODEL_CANDIDATES if os.path.exists(path)), MODEL_CANDIDATES[-1])
 
 class GCVWorker:
     def __init__(self, width, height):
         self.model = YOLO(MODEL_PATH)
-        # Load to MPS (GPU) for raw speed
-        self.model.to('mps') 
+        # Prefer MPS for speed, but fall back to CPU when unavailable.
+        self.device = "mps"
+        try:
+            self.model.to(self.device)
+        except Exception:
+            self.device = "cpu"
+            self.model.to(self.device)
         
         self.width, self.height = width, height
         self.center_x, self.center_y = width // 2, height // 2
@@ -23,7 +32,7 @@ class GCVWorker:
         # State for Smoothing
         self.smooth_x, self.smooth_y = self.center_x, self.center_y
         
-        print(f"M4 LINEAR-SYNC ONLINE | Model: {MODEL_PATH}")
+        print(f"M4 LINEAR-SYNC ONLINE | Model: {MODEL_PATH} | Device: {self.device}")
 
     def process(self, frame):
         # 1. FOV CIRCLE (Visualized)
@@ -39,7 +48,7 @@ class GCVWorker:
             source=ai_frame, 
             conf=0.32, 
             imgsz=640, 
-            device='mps', 
+            device=self.device, 
             verbose=False
         )
         
@@ -52,6 +61,8 @@ class GCVWorker:
             for box in boxes:
                 x1, y1, x2, y2 = box.xyxy[0].numpy()
                 w, h = x2 - x1, y2 - y1
+                if w <= 0 or h <= 0:
+                    continue
                 
                 # Human Aspect Ratio Filter
                 if (h / w) < 1.3 or h < 25: continue

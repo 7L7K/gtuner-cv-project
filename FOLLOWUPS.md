@@ -1,0 +1,1 @@
+- [gpc] Verify stale CV vector reset behavior when `gcv_ready()` is false (gpc/gtuner_script.gpc:8) — persistent `rel_x/rel_y` may keep applying stick pull after feed drops if not intentionally held.
