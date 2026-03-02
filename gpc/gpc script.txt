@@ -1,0 +1,22 @@
+#include <display.gph>
+
+int16 rel_x, rel_y;
+// Lower power = smoother lock. Start at 0.35 and go up slowly.
+fix32 SMOOTH_POWER = 0.35; 
+
+main {
+    if(gcv_ready()) {
+        if(gcv_read(0) == 1) {
+            rel_x = (gcv_read(1) << 8) | gcv_read(2);
+            rel_y = (gcv_read(3) << 8) | gcv_read(4);
+        }
+    }
+
+    if(get_val(BUTTON_8) > 10.0) { // While holding L2
+        if(abs(rel_x) > 2 || abs(rel_y) > 2) {
+            // Apply a dampened pull to stop the "flying" effect
+            set_val(STICK_1_X, clamp(get_val(STICK_1_X) + (fix32)rel_x * SMOOTH_POWER, -100.0, 100.0));
+            set_val(STICK_1_Y, clamp(get_val(STICK_1_Y) + (fix32)rel_y * SMOOTH_POWER, -100.0, 100.0));
+        }
+    }
+}
