@@ -7,6 +7,11 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+try:
+    import torch
+except Exception:  # pragma: no cover - runtime fallback if torch import fails
+    torch = None
+
 # Dynamic Pathing to find your model
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_CANDIDATES = (
@@ -15,16 +20,36 @@ MODEL_CANDIDATES = (
 )
 MODEL_PATH = next((path for path in MODEL_CANDIDATES if os.path.exists(path)), MODEL_CANDIDATES[-1])
 
+
+def _assert_model_exists():
+    if any(os.path.exists(path) for path in MODEL_CANDIDATES):
+        return
+    checked = ", ".join(MODEL_CANDIDATES)
+    raise FileNotFoundError(f"Model file not found. Checked: {checked}")
+
+
+def _mps_is_available():
+    if torch is None:
+        return False
+    try:
+        return bool(torch.backends.mps.is_available())
+    except Exception:
+        return False
+
 class GCVWorker:
     def __init__(self, width, height):
+        _assert_model_exists()
         self.model = YOLO(MODEL_PATH)
-        # Prefer MPS for speed, but fall back to CPU when unavailable.
-        self.device = "mps"
+        # Prefer MPS for speed when available; otherwise run on CPU.
+        self.device = "mps" if _mps_is_available() else "cpu"
         try:
             self.model.to(self.device)
         except Exception:
-            self.device = "cpu"
-            self.model.to(self.device)
+            if self.device != "cpu":
+                self.device = "cpu"
+                self.model.to(self.device)
+            else:
+                raise
         
         self.width, self.height = width, height
         self.center_x, self.center_y = width // 2, height // 2
